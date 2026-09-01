@@ -6,6 +6,7 @@ from astrbot_plugin_zhihu_hotlist.zhihu_hotlist.client import (
     ZhihuApiError,
     ZhihuHotListClient,
     parse_hot_list,
+    parse_search_results,
 )
 
 
@@ -59,3 +60,31 @@ def test_headers_use_bearer_and_unix_timestamp() -> None:
     headers = ZhihuHotListClient("secret-value")._headers()
     assert headers["Authorization"] == "Bearer secret-value"
     assert headers["X-Request-Timestamp"].isdigit()
+
+
+def test_parse_search_results_with_official_casing() -> None:
+    items = parse_search_results(
+        {
+            "Code": 0,
+            "Data": {
+                "Items": [
+                    {
+                        "Title": "<em>测试</em>回答",
+                        "Url": "https://www.zhihu.com/question/1/answer/2",
+                        "ContentText": "回答 摘要",
+                        "AuthorName": "答主",
+                    }
+                ]
+            },
+        },
+        limit=3,
+    )
+
+    assert len(items) == 1
+    assert items[0].title == "测试回答"
+    assert items[0].content == "回答 摘要"
+    assert items[0].author == "答主"
+
+
+def test_empty_search_results_are_not_an_api_error() -> None:
+    assert parse_search_results({"code": 0, "data": {"items": []}}) == []

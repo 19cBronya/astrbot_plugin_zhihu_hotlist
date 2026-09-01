@@ -12,6 +12,7 @@ import aiohttp
 
 
 HOT_LIST_URL = "https://developer.zhihu.com/api/v1/content/hot_list"
+SEARCH_URL = "https://developer.zhihu.com/api/v1/content/zhihu_search"
 
 
 class ZhihuApiError(RuntimeError):
@@ -23,6 +24,14 @@ class HotListItem:
     title: str
     url: str
     summary: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class SearchItem:
+    title: str
+    url: str
+    content: str = ""
+    author: str = ""
 
 
 def _text(value: Any) -> str:
@@ -94,6 +103,54 @@ def parse_hot_list(payload: dict[str, Any], limit: int = 30) -> list[HotListItem
     return parsed
 
 
+def parse_search_results(
+    payload: dict[str, Any],
+    limit: int = 10,
+) -> list[SearchItem]:
+    """Parse Zhihu search results and return an empty list for no matches."""
+    if not isinstance(payload, dict):
+        raise ZhihuApiError("知乎开放平台返回了无效搜索数据。")
+
+    code = payload.get("Code", payload.get("code", 0))
+    if code not in (0, "0", None):
+        message = _api_message(payload, "搜索失败")
+        raise ZhihuApiError(f"知乎搜索失败：{message}（code={code}）")
+
+    data: Any = payload.get("Data", payload.get("data", payload))
+    if isinstance(data, list):
+        raw_items = data
+    elif isinstance(data, dict):
+        raw_items = data.get("Items", data.get("items", []))
+    else:
+        raw_items = []
+    if not isinstance(raw_items, list):
+        raise ZhihuApiError("知乎开放平台搜索数据格式不正确。")
+
+    parsed: list[SearchItem] = []
+    for raw in raw_items:
+        if not isinstance(raw, dict):
+            continue
+        title = _text(raw.get("Title", raw.get("title", "")))
+        if not title:
+            continue
+        parsed.append(
+            SearchItem(
+                title=title,
+                url=_safe_http_url(raw.get("Url", raw.get("url", ""))),
+                content=_text(
+                    raw.get(
+                        "ContentText",
+                        raw.get("content_text", raw.get("Summary", raw.get("summary", ""))),
+                    )
+                ),
+                author=_text(raw.get("AuthorName", raw.get("author_name", ""))),
+            )
+        )
+        if len(parsed) >= max(1, min(int(limit), 10)):
+            break
+    return parsed
+
+
 class ZhihuHotListClient:
     def __init__(self, token: str, timeout_seconds: int = 20) -> None:
         self.token = str(token or "").strip()
@@ -105,20 +162,23 @@ class ZhihuHotListClient:
             "X-Request-Timestamp": str(int(time.time())),
             "Accept": "application/json",
             "Content-Type": "application/json",
-            "User-Agent": "astrbot-plugin-zhihu-hotlist/0.1.1",
+            "User-Agent": "astrbot-plugin-zhihu-hotlist/0.2.0",
         }
 
-    async def fetch(self, limit: int = 10) -> list[HotListItem]:
+    async def _get_json(
+        self,
+        url: str,
+        params: dict[str, Any],
+    ) -> dict[str, Any]:
         if not self.token:
             raise ZhihuApiError("尚未配置知乎开放平台 token。")
 
-        limit = max(1, min(int(limit), 30))
         timeout = aiohttp.ClientTimeout(total=self.timeout_seconds)
         try:
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.get(
-                    HOT_LIST_URL,
-                    params={"Limit": limit},
+                    url,
+                    params=params,
                     headers=self._headers(),
                     allow_redirects=False,
                 ) as response:
@@ -143,4 +203,22 @@ class ZhihuHotListClient:
         except aiohttp.ClientError as exc:
             raise ZhihuApiError(f"无法连接知乎开放平台：{exc}") from exc
 
+        if not isinstance(payload, dict):
+            raise ZhihuApiError("知乎开放平台返回了无效 JSON 数据。")
+        return payload
+
+    async def fetch(self, limit: int = 10) -> list[HotListItem]:
+        limit = max(1, min(int(limit), 30))
+        payload = await self._get_json(HOT_LIST_URL, {"Limit": limit})
         return parse_hot_list(payload, limit)
+
+    async def search(self, query: str, count: int = 3) -> list[SearchItem]:
+        query = str(query or "").strip()
+        if not query:
+            raise ValueError("知乎搜索关键词不能为空。")
+        count = max(1, min(int(count), 10))
+        payload = await self._get_json(
+            SEARCH_URL,
+            {"Query": query, "Count": count},
+        )
+        return parse_search_results(payload, count)
