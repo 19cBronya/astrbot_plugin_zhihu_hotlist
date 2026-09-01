@@ -35,7 +35,7 @@ AstrBot/data/plugins/astrbot_plugin_zhihu_hotlist/
 | `daily_push_time` | `08:00` | 每日推送时间，24 小时制 `HH:MM` |
 | `timezone` | `Asia/Shanghai` | IANA 时区名称 |
 | `hot_count` | `10` | 榜单条数，允许 1–30 |
-| `render_as_image` | `false` | 使用 AstrBot 渲染服务生成热榜与搜索结果图片 |
+| `output_mode` | `text` | 消息输出模式；在管理面板下拉选择 `text`（文字消息）或 `image`（图片消息） |
 | `enable_search` | `false` | 为热榜话题附加知乎搜索结果 |
 | `search_top_n` | `3` | 搜索实际热榜的前 X 条，最大 10 |
 | `search_results_per_topic` | `3` | 每次搜索展示的结果数，允许 1–10；不增加请求次数 |
@@ -79,13 +79,21 @@ min(search_top_n, 实际热榜条数, 10, 今日剩余搜索额度)
 
 ## 图片渲染
 
-开启 `render_as_image` 后，插件调用 AstrBot 官方插件 API：
+将“消息输出模式”选择为 `image` 后，插件调用 AstrBot 官方插件 API：
 
 ```python
 await self.html_render(HTML模板, 渲染数据, options={"type": "png"})
 ```
 
 需要 AstrBot 的文本转图片服务可用。插件不直接依赖 Playwright，也不自行启动浏览器；远程或本地渲染策略由 AstrBot 全局配置决定。
+
+更新插件后需要在 AstrBot 管理面板重新载入插件（或重启 AstrBot），新配置项才会从 `_conf_schema.json` 同步到插件配置。v0.2.0 中已经开启 `render_as_image` 的用户会自动迁移为 `image` 模式。
+
+## v0.2.1
+
+- 将不醒目的图片布尔开关改为“消息输出模式”下拉框，可明确选择文字消息或图片消息。
+- 自动迁移 v0.2.0 的 `render_as_image=true` 配置。
+- 在配置提示和 README 中补充更新后重新载入插件的要求。
 
 ## v0.2.0
 

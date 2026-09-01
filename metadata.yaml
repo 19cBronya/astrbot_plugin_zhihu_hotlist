@@ -2,7 +2,7 @@ name: astrbot_plugin_zhihu_hotlist
 display_name: 知乎热搜每日推送
 short_desc: 每日以文字或图片向指定 UMO 推送知乎热榜及相关搜索。
 desc: 使用知乎数据开放平台官方接口获取实时热榜，可选搜索前 X 条热点并通过 AstrBot 渲染服务生成图片；单次拉取和渲染后广播到全部目标 UMO。
-version: v0.2.0
+version: v0.2.1
 author: 19cBronya
 repo: https://github.com/19cBronya/astrbot_plugin_zhihu_hotlist
 astrbot_version: ">=4.16,<5"

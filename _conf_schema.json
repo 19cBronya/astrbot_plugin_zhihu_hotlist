@@ -38,11 +38,14 @@
     "hint": "知乎开放平台允许 1–30 条，超出范围会自动限制。",
     "default": 10
   },
-  "render_as_image": {
-    "type": "bool",
-    "description": "使用 AstrBot 渲染服务生成图片",
-    "hint": "开启后将热榜与相关搜索渲染为一张图片；渲染失败会自动回退为完整文字消息，不会重新请求知乎接口。",
-    "default": false
+  "output_mode": {
+    "type": "string",
+    "description": "消息输出模式（可选择图片消息）",
+    "hint": "选择 image 后，使用 AstrBot 渲染服务将热榜与相关搜索生成一张图片；渲染失败会自动回退为完整文字消息，不会重新请求知乎接口。",
+    "obvious_hint": true,
+    "options": ["text", "image"],
+    "labels": ["文字消息", "图片消息"],
+    "default": "text"
   },
   "enable_search": {
     "type": "bool",
@@ -61,5 +64,12 @@
     "description": "每个热榜话题展示的搜索结果数",
     "hint": "允许 1–10 条。此配置影响单次搜索返回多少条内容，不增加搜索请求次数。",
     "default": 3
+  },
+  "render_as_image": {
+    "type": "bool",
+    "description": "旧版图片消息开关",
+    "hint": "仅用于自动迁移 v0.2.0 的配置。",
+    "invisible": true,
+    "default": false
   }
 }

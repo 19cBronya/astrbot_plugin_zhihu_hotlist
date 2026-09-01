@@ -268,7 +268,7 @@ def test_image_render_runs_once_and_builds_image_delivery(monkeypatch) -> None:
     module = _load_main(monkeypatch)
     plugin = module.ZhihuHotListPlugin(
         _Context(),
-        _Config(render_as_image=True, timezone="Asia/Shanghai"),
+        _Config(output_mode="image", timezone="Asia/Shanghai"),
     )
     render_calls = []
 
@@ -294,7 +294,7 @@ def test_image_render_failure_falls_back_to_complete_text(monkeypatch) -> None:
     module = _load_main(monkeypatch)
     plugin = module.ZhihuHotListPlugin(
         _Context(),
-        _Config(render_as_image=True, timezone="Asia/Shanghai"),
+        _Config(output_mode="image", timezone="Asia/Shanghai"),
     )
 
     async def failed_render(_template, _data, options=None):
@@ -310,3 +310,17 @@ def test_image_render_failure_falls_back_to_complete_text(monkeypatch) -> None:
     assert delivery.image_ref == ""
     assert "回退测试" in delivery.text
     assert isinstance(components[0], _Plain)
+
+
+def test_legacy_image_switch_is_migrated_to_output_mode(monkeypatch) -> None:
+    module = _load_main(monkeypatch)
+    config = _Config(
+        output_mode="text",
+        render_as_image=True,
+        timezone="Asia/Shanghai",
+    )
+    plugin = module.ZhihuHotListPlugin(_Context(), config)
+
+    assert config["output_mode"] == "image"
+    assert config["render_as_image"] is False
+    assert plugin._image_output_enabled() is True

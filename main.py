@@ -29,7 +29,7 @@ from .zhihu_hotlist import (
 
 
 PLUGIN_NAME = "astrbot_plugin_zhihu_hotlist"
-PLUGIN_VERSION = "0.2.0"
+PLUGIN_VERSION = "0.2.1"
 SEARCH_DAILY_LIMIT = 10
 SEARCH_QUOTA_KEY = "zhihu_search_daily_quota_v1"
 
@@ -54,6 +54,7 @@ class ZhihuHotListPlugin(Star):
         self._quota_lock = asyncio.Lock()
         self._search_quota_date = ""
         self._search_quota_used = 0
+        self._migrate_output_mode()
 
     async def initialize(self) -> None:
         await self._load_search_quota()
@@ -68,7 +69,7 @@ class ZhihuHotListPlugin(Star):
             len(self._target_umos()),
             self._cfg_str("daily_push_time", "08:00"),
             self._cfg_str("timezone", "Asia/Shanghai"),
-            "图片" if self._cfg_bool("render_as_image", False) else "文字",
+            "图片" if self._image_output_enabled() else "文字",
             "开启" if self._cfg_bool("enable_search", False) else "关闭",
         )
 
@@ -216,7 +217,7 @@ class ZhihuHotListPlugin(Star):
     async def _prepare_delivery(self, bundle: ReportBundle) -> Delivery:
         generated_at = datetime.now(self._timezone())
         text = format_text(bundle, generated_at)
-        if not self._cfg_bool("render_as_image", False):
+        if not self._image_output_enabled():
             return Delivery(text=text)
 
         try:
@@ -342,6 +343,22 @@ class ZhihuHotListPlugin(Star):
 
     def _search_results_per_topic(self) -> int:
         return self._cfg_int("search_results_per_topic", 3, 1, 10)
+
+    def _image_output_enabled(self) -> bool:
+        return self._cfg_str("output_mode", "text").lower() == "image"
+
+    def _migrate_output_mode(self) -> None:
+        """Migrate the v0.2.0 boolean switch to the visible mode selector."""
+        if not self._cfg_bool("render_as_image", False):
+            return
+        self.config["output_mode"] = "image"
+        self.config["render_as_image"] = False
+        save_config = getattr(self.config, "save_config", None)
+        if callable(save_config):
+            try:
+                save_config()
+            except Exception:
+                logger.exception("%s 迁移图片输出配置失败", PLUGIN_NAME)
 
     def _timezone(self) -> ZoneInfo:
         return ZoneInfo(self._cfg_str("timezone", "Asia/Shanghai"))
