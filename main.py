@@ -21,7 +21,7 @@ from .zhihu_hotlist import (
 
 
 PLUGIN_NAME = "astrbot_plugin_zhihu_hotlist"
-PLUGIN_VERSION = "0.1.0"
+PLUGIN_VERSION = "0.1.1"
 
 
 @register(
@@ -120,10 +120,17 @@ class ZhihuHotListPlugin(Star):
                 await asyncio.sleep(60)
 
     async def _push_daily(self) -> None:
+        # Freeze the recipients first. One scheduled run owns exactly one API
+        # snapshot, which is then reused for every target UMO.
+        targets = self._target_umos()
+        if not targets:
+            logger.warning("%s 本次推送没有目标 UMO，已跳过接口请求", PLUGIN_NAME)
+            return
+
         items = await self._fetch_hot_list(self._hot_count())
         message = self._format_message(items)
         succeeded = 0
-        for umo in self._target_umos():
+        for umo in targets:
             try:
                 await self.context.send_message(
                     umo,
@@ -135,10 +142,10 @@ class ZhihuHotListPlugin(Star):
             except Exception:
                 logger.exception("%s 推送到 UMO 失败：%s", PLUGIN_NAME, umo)
         logger.info(
-            "%s 每日热榜推送完成：成功 %d/%d",
+            "%s 每日热榜推送完成：接口拉取 1 次，成功推送 %d/%d",
             PLUGIN_NAME,
             succeeded,
-            len(self._target_umos()),
+            len(targets),
         )
 
     async def _fetch_hot_list(self, count: int) -> list[HotListItem]:

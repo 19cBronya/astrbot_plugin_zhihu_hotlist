@@ -132,3 +132,18 @@ def test_daily_push_fetches_once_and_sends_each_target(monkeypatch) -> None:
     assert calls == 1
     assert [umo for umo, _chain in context.sent] == ["umo:a:1", "umo:b:2"]
     assert context.sent[0][1].chain[0].text.startswith("知乎热榜")
+    assert context.sent[0][1].chain[0].text == context.sent[1][1].chain[0].text
+
+
+def test_daily_push_with_no_target_does_not_fetch(monkeypatch) -> None:
+    module = _load_main(monkeypatch)
+    plugin = module.ZhihuHotListPlugin(
+        _Context(),
+        _Config(target_umos=[], token="secret", timezone="Asia/Shanghai"),
+    )
+
+    async def forbidden_fetch(_count: int):
+        raise AssertionError("empty target list must not consume API quota")
+
+    plugin._fetch_hot_list = forbidden_fetch
+    asyncio.run(plugin._push_daily())

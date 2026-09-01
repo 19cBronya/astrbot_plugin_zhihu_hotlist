@@ -105,7 +105,7 @@ class ZhihuHotListClient:
             "X-Request-Timestamp": str(int(time.time())),
             "Accept": "application/json",
             "Content-Type": "application/json",
-            "User-Agent": "astrbot-plugin-zhihu-hotlist/0.1.0",
+            "User-Agent": "astrbot-plugin-zhihu-hotlist/0.1.1",
         }
 
     async def fetch(self, limit: int = 10) -> list[HotListItem]:
