@@ -1,0 +1,12 @@
+name: astrbot_plugin_zhihu_hotlist
+display_name: 知乎热搜每日推送
+short_desc: 每日定时向指定 UMO 推送知乎官方热榜。
+desc: 使用知乎数据开放平台官方接口获取实时热榜，支持配置生效 UMO、Access Secret、每日推送时间、时区和榜单条数。
+version: v0.1.0
+author: 19cBronya
+repo: https://github.com/19cBronya/astrbot_plugin_zhihu_hotlist
+astrbot_version: ">=4.16,<5"
+tags:
+  - zhihu
+  - hot-list
+  - scheduled-push

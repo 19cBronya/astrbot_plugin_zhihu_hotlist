@@ -1,0 +1,41 @@
+{
+  "enabled": {
+    "type": "bool",
+    "description": "启用知乎热搜插件",
+    "default": true
+  },
+  "target_umos": {
+    "type": "list",
+    "description": "生效并接收每日推送的 UMO",
+    "hint": "填写完整 UMO，例如 default:FriendMessage:123456789。可通过 AstrBot 的 /sid 命令查看；空列表不会推送，也不响应手动查询。",
+    "obvious_hint": true,
+    "default": []
+  },
+  "token": {
+    "type": "string",
+    "description": "知乎开放平台 Access Secret",
+    "hint": "在 https://developer.zhihu.com/profile 获取。只填写 Access Secret 本身，不要添加 Bearer 前缀。",
+    "obvious_hint": true,
+    "secret": true,
+    "default": ""
+  },
+  "daily_push_time": {
+    "type": "string",
+    "description": "每日推送时间",
+    "hint": "使用 HH:MM 的 24 小时格式，例如 08:30。",
+    "obvious_hint": true,
+    "default": "08:00"
+  },
+  "timezone": {
+    "type": "string",
+    "description": "推送时区",
+    "hint": "IANA 时区名称，例如 Asia/Shanghai。",
+    "default": "Asia/Shanghai"
+  },
+  "hot_count": {
+    "type": "int",
+    "description": "每次推送的热榜条数",
+    "hint": "知乎开放平台允许 1–30 条，超出范围会自动限制。",
+    "default": 10
+  }
+}
