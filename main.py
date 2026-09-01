@@ -29,7 +29,7 @@ from .zhihu_hotlist import (
 
 
 PLUGIN_NAME = "astrbot_plugin_zhihu_hotlist"
-PLUGIN_VERSION = "0.2.1"
+PLUGIN_VERSION = "0.2.2"
 SEARCH_DAILY_LIMIT = 10
 SEARCH_QUOTA_KEY = "zhihu_search_daily_quota_v1"
 

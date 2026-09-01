@@ -162,7 +162,7 @@ class ZhihuHotListClient:
             "X-Request-Timestamp": str(int(time.time())),
             "Accept": "application/json",
             "Content-Type": "application/json",
-            "User-Agent": "astrbot-plugin-zhihu-hotlist/0.2.0",
+            "User-Agent": "astrbot-plugin-zhihu-hotlist/0.2.2",
         }
 
     async def _get_json(
