@@ -60,7 +60,7 @@ def test_headers_use_bearer_and_unix_timestamp() -> None:
     headers = ZhihuHotListClient("secret-value")._headers()
     assert headers["Authorization"] == "Bearer secret-value"
     assert headers["X-Request-Timestamp"].isdigit()
-    assert headers["User-Agent"] == "astrbot-plugin-zhihu-hotlist/0.2.2"
+    assert headers["User-Agent"] == "astrbot-plugin-zhihu-hotlist/0.2.3"
 
 
 def test_parse_search_results_with_official_casing() -> None:

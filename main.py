@@ -29,9 +29,11 @@ from .zhihu_hotlist import (
 
 
 PLUGIN_NAME = "astrbot_plugin_zhihu_hotlist"
-PLUGIN_VERSION = "0.2.2"
+PLUGIN_VERSION = "0.2.3"
 SEARCH_DAILY_LIMIT = 10
 SEARCH_QUOTA_KEY = "zhihu_search_daily_quota_v1"
+DAILY_PUSH_STATE_KEY = "zhihu_daily_push_state_v1"
+SCHEDULER_MAX_SLEEP_SECONDS = 60.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,12 +54,15 @@ class ZhihuHotListPlugin(Star):
         self.config = config
         self._scheduler_task: asyncio.Task[Any] | None = None
         self._quota_lock = asyncio.Lock()
+        self._daily_push_lock = asyncio.Lock()
         self._search_quota_date = ""
         self._search_quota_used = 0
+        self._last_daily_push_date = ""
         self._migrate_output_mode()
 
     async def initialize(self) -> None:
         await self._load_search_quota()
+        await self._load_daily_push_state()
         self._log_config_warnings()
         self._scheduler_task = asyncio.create_task(
             self._scheduler_loop(),
@@ -107,44 +112,90 @@ class ZhihuHotListPlugin(Star):
                     continue
 
                 timezone_name = self._cfg_str("timezone", "Asia/Shanghai")
-                now = datetime.now(ZoneInfo(timezone_name))
+                now = self._now(ZoneInfo(timezone_name))
                 scheduled = next_push_at(
                     now,
                     self._cfg_str("daily_push_time", "08:00"),
                     timezone_name,
                 )
-                delay = max(0.0, (scheduled - now).total_seconds())
                 logger.info(
                     "%s 下次推送时间：%s",
                     PLUGIN_NAME,
                     scheduled.isoformat(timespec="minutes"),
                 )
-                await asyncio.sleep(delay)
-                await self._push_with_retries()
+                await self._wait_until(scheduled)
+                await self._run_scheduled_push()
             except asyncio.CancelledError:
                 raise
             except Exception:
                 logger.exception("%s 定时任务异常，5 分钟后重试调度", PLUGIN_NAME)
                 await asyncio.sleep(300)
 
-    async def _push_with_retries(self) -> None:
+    async def _wait_until(self, scheduled: datetime) -> None:
+        """Wait against wall-clock time, rechecking after every short sleep.
+
+        WSL/Hyper-V may adjust wall-clock time after the host sleeps or resumes.
+        A single day-long asyncio.sleep() uses a monotonic clock and can therefore
+        finish before the configured local time. Short waits plus a wall-clock
+        recheck prevent an early daily push.
+        """
+        while True:
+            now = self._now(scheduled.tzinfo)
+            remaining = (scheduled - now).total_seconds()
+            if remaining <= 0:
+                return
+            await asyncio.sleep(min(remaining, SCHEDULER_MAX_SLEEP_SECONDS))
+
+    async def _run_scheduled_push(self) -> None:
+        """Run at most one completed scheduled delivery per local calendar day."""
+        async with self._daily_push_lock:
+            push_date = self._now().date().isoformat()
+            if self._last_daily_push_date == push_date:
+                logger.warning(
+                    "%s 已完成 %s 的定时推送，本轮重复触发已跳过",
+                    PLUGIN_NAME,
+                    push_date,
+                )
+                return
+
+            completed = await self._push_with_retries()
+            if not completed:
+                return
+
+            self._last_daily_push_date = push_date
+            try:
+                await self.put_kv_data(
+                    DAILY_PUSH_STATE_KEY,
+                    {
+                        "date": push_date,
+                        "completed_at": self._now().isoformat(timespec="seconds"),
+                    },
+                )
+            except Exception:
+                logger.exception(
+                    "%s 保存每日推送去重状态失败；当前进程仍会阻止重复推送",
+                    PLUGIN_NAME,
+                )
+
+    async def _push_with_retries(self) -> bool:
         """Retry only hot-list failures, avoiding duplicate partial deliveries."""
         for attempt in range(1, 4):
             try:
                 await self._push_daily()
-                return
+                return True
             except asyncio.CancelledError:
                 raise
             except Exception:
                 if attempt == 3:
                     logger.exception("%s 每日热榜连续 3 次获取失败", PLUGIN_NAME)
-                    return
+                    return False
                 logger.exception(
                     "%s 每日热榜第 %d 次获取失败，60 秒后重试",
                     PLUGIN_NAME,
                     attempt,
                 )
                 await asyncio.sleep(60)
+        return False
 
     async def _push_daily(self) -> None:
         # One scheduled run owns one hot-list/search snapshot. Rendering and
@@ -274,6 +325,15 @@ class ZhihuHotListPlugin(Star):
                 self._search_quota_used = 0
         self._reset_quota_if_new_day()
 
+    async def _load_daily_push_state(self) -> None:
+        try:
+            value = await self.get_kv_data(DAILY_PUSH_STATE_KEY, {})
+        except Exception:
+            logger.exception("%s 读取每日推送去重状态失败", PLUGIN_NAME)
+            value = {}
+        if isinstance(value, dict):
+            self._last_daily_push_date = str(value.get("date", "")).strip()
+
     async def _reserve_search_slots(self, requested: int) -> int:
         requested = max(0, min(int(requested), SEARCH_DAILY_LIMIT))
         async with self._quota_lock:
@@ -362,6 +422,9 @@ class ZhihuHotListPlugin(Star):
 
     def _timezone(self) -> ZoneInfo:
         return ZoneInfo(self._cfg_str("timezone", "Asia/Shanghai"))
+
+    def _now(self, timezone: Any | None = None) -> datetime:
+        return datetime.now(timezone or self._timezone())
 
     def _cfg_str(self, key: str, default: str) -> str:
         return str(self.config.get(key, default) or default).strip()

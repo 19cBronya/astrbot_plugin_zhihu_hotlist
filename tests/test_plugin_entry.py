@@ -4,6 +4,7 @@ import asyncio
 import importlib
 import sys
 import types
+from datetime import datetime, timezone
 
 from astrbot_plugin_zhihu_hotlist.zhihu_hotlist.client import HotListItem, SearchItem
 
@@ -132,6 +133,98 @@ def test_exact_umo_gate_and_scheduler_lifecycle(monkeypatch) -> None:
         assert plugin._scheduler_task is None
 
     asyncio.run(lifecycle())
+
+
+def test_wait_until_rechecks_wall_clock_after_backward_jump(monkeypatch) -> None:
+    module = _load_main(monkeypatch)
+    plugin = module.ZhihuHotListPlugin(
+        _Context(),
+        _Config(timezone="Asia/Shanghai"),
+    )
+    scheduled = datetime(2026, 11, 2, 8, 0, tzinfo=timezone.utc)
+    wall_clock = iter(
+        [
+            datetime(2026, 11, 2, 7, 59, tzinfo=timezone.utc),
+            datetime(2026, 11, 2, 7, 58, 30, tzinfo=timezone.utc),
+            datetime(2026, 11, 2, 8, 0, tzinfo=timezone.utc),
+        ]
+    )
+    sleeps = []
+
+    plugin._now = lambda _timezone=None: next(wall_clock)
+
+    async def fake_sleep(seconds: float) -> None:
+        sleeps.append(seconds)
+
+    monkeypatch.setattr(module.asyncio, "sleep", fake_sleep)
+    asyncio.run(plugin._wait_until(scheduled))
+
+    assert sleeps == [60.0, 60.0]
+
+
+def test_scheduled_push_is_persistently_deduplicated(monkeypatch) -> None:
+    module = _load_main(monkeypatch)
+    now = datetime(2026, 11, 2, 8, 0, tzinfo=timezone.utc)
+    plugin = module.ZhihuHotListPlugin(
+        _Context(),
+        _Config(timezone="Asia/Shanghai"),
+    )
+    plugin._now = lambda _timezone=None: now
+    calls = 0
+
+    async def fake_push() -> bool:
+        nonlocal calls
+        calls += 1
+        return True
+
+    plugin._push_with_retries = fake_push
+
+    async def run_twice() -> None:
+        await plugin._run_scheduled_push()
+        await plugin._run_scheduled_push()
+
+    asyncio.run(run_twice())
+
+    assert calls == 1
+    assert plugin.kv[module.DAILY_PUSH_STATE_KEY]["date"] == "2026-11-02"
+
+    restored = module.ZhihuHotListPlugin(
+        _Context(),
+        _Config(timezone="Asia/Shanghai"),
+    )
+    restored.kv = dict(plugin.kv)
+    restored._now = lambda _timezone=None: now
+
+    async def forbidden_push() -> bool:
+        raise AssertionError("persisted daily state must prevent a duplicate push")
+
+    restored._push_with_retries = forbidden_push
+
+    async def restore_and_try() -> None:
+        await restored._load_daily_push_state()
+        await restored._run_scheduled_push()
+
+    asyncio.run(restore_and_try())
+
+
+def test_failed_scheduled_push_is_not_marked_complete(monkeypatch) -> None:
+    module = _load_main(monkeypatch)
+    plugin = module.ZhihuHotListPlugin(
+        _Context(),
+        _Config(timezone="Asia/Shanghai"),
+    )
+    plugin._now = lambda _timezone=None: datetime(
+        2026, 11, 2, 8, 0, tzinfo=timezone.utc
+    )
+
+    async def failed_push() -> bool:
+        return False
+
+    plugin._push_with_retries = failed_push
+    asyncio.run(plugin._run_scheduled_push())
+
+    assert plugin._last_daily_push_date == ""
+    assert module.DAILY_PUSH_STATE_KEY not in plugin.kv
 
 
 def test_daily_push_fetches_once_and_sends_each_target(monkeypatch) -> None:
